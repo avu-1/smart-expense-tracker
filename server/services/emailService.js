@@ -1,23 +1,21 @@
 // services/emailService.js
 // Centralised email utility.
-// Production: uses Resend (HTTP API — works on Railway, no SMTP port issues).
-// Development fallback: Nodemailer + Ethereal for previewing emails locally.
+// Production : SendGrid HTTP API (works on Railway — no SMTP ports needed).
+// Development: Nodemailer + Ethereal for local email preview.
 
 const nodemailer = require('nodemailer');
 
 // ---------------------------------------------------------------------------
-// Resend (production) send helper
+// SendGrid helper
 // ---------------------------------------------------------------------------
-const sendViaResend = async ({ to, subject, html, from }) => {
-  const { Resend } = require('resend');
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  const { data, error } = await resend.emails.send({ from, to, subject, html });
-  if (error) throw new Error(error.message || JSON.stringify(error));
-  return data;
+const sendViaSendGrid = async ({ to, subject, html, from }) => {
+  const sgMail = require('@sendgrid/mail');
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  await sgMail.send({ to, from, subject, html });
 };
 
 // ---------------------------------------------------------------------------
-// Nodemailer Ethereal (dev only) setup
+// Nodemailer Ethereal (dev only)
 // ---------------------------------------------------------------------------
 let devTransporter = null;
 const getDevTransporter = async () => {
@@ -28,9 +26,8 @@ const getDevTransporter = async () => {
     port: 587,
     auth: { user: testAccount.user, pass: testAccount.pass },
   });
-  console.log('📧 Email service: using Ethereal test account (dev)');
-  console.log(`   Preview: https://ethereal.email/messages`);
-  console.log(`   Credentials: ${testAccount.user} / ${testAccount.pass}`);
+  console.log('📧 Email (dev): Ethereal — ' + testAccount.user);
+  console.log('   Preview: https://ethereal.email/messages');
   return devTransporter;
 };
 
@@ -39,37 +36,33 @@ const getDevTransporter = async () => {
 // ---------------------------------------------------------------------------
 
 /**
- * Send a single email.
- * Production: uses Resend HTTP API (works on Railway — no SMTP ports needed).
- * Development: falls back to Ethereal for preview.
- * @param {Object} options - { to, subject, html, text }
+ * Send an email.
+ * Uses SendGrid in production (SENDGRID_API_KEY set), Ethereal in dev.
+ * Never throws — logs errors and returns null on failure.
+ *
+ * @param {{ to: string, subject: string, html: string }} opts
  */
 const sendEmail = async ({ to, subject, html }) => {
-  const FROM = process.env.RESEND_FROM || process.env.SMTP_FROM || 'SpendWise <onboarding@resend.dev>';
+  const FROM = process.env.MAIL_FROM || 'SpendWise <noreply@spendwise.app>';
   try {
-    if (process.env.RESEND_API_KEY) {
-      // ── Production: Resend HTTP API ──────────────────────────────────────
-      console.log(`📧 Sending via Resend to ${to}...`);
-      const data = await sendViaResend({ to, subject, html, from: FROM });
-      console.log(`✅ Resend: email sent to ${to}. ID: ${data?.id}`);
-      return data;
+    if (process.env.SENDGRID_API_KEY) {
+      console.log(`📧 Sending via SendGrid to ${to}…`);
+      await sendViaSendGrid({ to, subject, html, from: FROM });
+      console.log(`✅ SendGrid: email sent to ${to}`);
     } else {
-      // ── Development: Ethereal preview ────────────────────────────────────
       const t = await getDevTransporter();
       const info = await t.sendMail({ from: FROM, to, subject, html });
       console.log(`📧 Dev email preview → ${nodemailer.getTestMessageUrl(info)}`);
-      return info;
     }
   } catch (err) {
     console.error(`❌ Email send failed to ${to}:`, err.message);
-    return null;
+    if (err.response) console.error('SendGrid response:', JSON.stringify(err.response.body));
   }
 };
 
 // ---------------------------------------------------------------------------
 // Shared HTML shell
 // ---------------------------------------------------------------------------
-
 const emailShell = (bodyHtml) => `
 <!DOCTYPE html>
 <html>
@@ -108,11 +101,6 @@ const emailShell = (bodyHtml) => `
 // Specific email templates
 // ---------------------------------------------------------------------------
 
-/**
- * Send a "budget exceeded" alert.
- * @param {Object} user   - { name, email }
- * @param {Object} budget - { limit, spent, remaining, percentage, month }
- */
 const sendBudgetExceededAlert = async (user, budget) => {
   const html = emailShell(`
     <h2>🚨 Budget Exceeded</h2>
@@ -127,7 +115,6 @@ const sendBudgetExceededAlert = async (user, budget) => {
     <hr class="divider"/>
     <p>Review your recent transactions in SpendWise and identify areas to cut back.</p>
   `);
-
   return sendEmail({
     to: user.email,
     subject: `🚨 Budget Exceeded — You've overspent by ₹${Math.abs(budget.remaining).toLocaleString()} this month`,
@@ -135,9 +122,6 @@ const sendBudgetExceededAlert = async (user, budget) => {
   });
 };
 
-/**
- * Send a "budget warning" alert (80%+ used).
- */
 const sendBudgetWarningAlert = async (user, budget) => {
   const html = emailShell(`
     <h2>⚠️ Budget Warning</h2>
@@ -152,7 +136,6 @@ const sendBudgetWarningAlert = async (user, budget) => {
     <hr class="divider"/>
     <p>You have <strong>₹${budget.remaining.toLocaleString()}</strong> left. Spend wisely for the rest of the month!</p>
   `);
-
   return sendEmail({
     to: user.email,
     subject: `⚠️ SpendWise: ${budget.percentage}% of your monthly budget used`,
@@ -160,17 +143,10 @@ const sendBudgetWarningAlert = async (user, budget) => {
   });
 };
 
-/**
- * Send an upcoming bill reminder.
- * @param {Object} user      - { name, email }
- * @param {Object} recurring - RecurringTransaction document
- * @param {number} daysLeft  - how many days until execution (1 or 2)
- */
 const sendBillReminderEmail = async (user, recurring, daysLeft) => {
   const dateStr = new Date(recurring.nextExecutionDate).toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
-
   const html = emailShell(`
     <h2>🔔 Upcoming Bill Reminder</h2>
     <p>Hi <strong>${user.name}</strong>,</p>
@@ -190,7 +166,6 @@ const sendBillReminderEmail = async (user, recurring, daysLeft) => {
     <hr class="divider"/>
     <p>This transaction will be automatically recorded on the due date.</p>
   `);
-
   return sendEmail({
     to: user.email,
     subject: `🔔 Reminder: "${recurring.title}" — ₹${recurring.amount.toLocaleString()} due in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`,
@@ -198,11 +173,6 @@ const sendBillReminderEmail = async (user, recurring, daysLeft) => {
   });
 };
 
-/**
- * Send a transaction confirmation email.
- * @param {Object} user        - { name, email }
- * @param {Object} transaction - Transaction document
- */
 const sendTransactionConfirmation = async (user, transaction) => {
   const isIncome = transaction.type === 'income';
   const html = emailShell(`
@@ -222,7 +192,6 @@ const sendTransactionConfirmation = async (user, transaction) => {
     <hr class="divider"/>
     <p>If this wasn't you, please review your account immediately.</p>
   `);
-
   return sendEmail({
     to: user.email,
     subject: `${isIncome ? '✅ Income' : '💸 Expense'} of ₹${transaction.amount.toLocaleString()} recorded in SpendWise`,
@@ -230,9 +199,6 @@ const sendTransactionConfirmation = async (user, transaction) => {
   });
 };
 
-/**
- * Send a recurring transaction auto-execution notice.
- */
 const sendRecurringExecutedEmail = async (user, recurring) => {
   const html = emailShell(`
     <h2>🔄 Recurring Transaction Executed</h2>
@@ -246,7 +212,6 @@ const sendRecurringExecutedEmail = async (user, recurring) => {
       <tr><td class="label">Next Due</td><td>${new Date(recurring.nextExecutionDate).toLocaleDateString('en-IN')}</td></tr>
     </table>
   `);
-
   return sendEmail({
     to: user.email,
     subject: `🔄 Auto-transaction: "${recurring.title}" — ₹${recurring.amount.toLocaleString()}`,
