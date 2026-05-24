@@ -1,0 +1,19 @@
+{
+  "name": "smart-expense-tracker",
+  "version": "1.0.0",
+  "description": "Smart Expense Tracker with AI-Based Insights - Full Stack App",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail \"npm.cmd run dev:server\" \"npm.cmd run dev:client\"",
+    "dev:server": "cd server && npm.cmd run dev",
+    "dev:client": "cd client && npm.cmd start",
+    "seed": "cd server && node config/seed.js",
+    "build": "npm install --prefix server && npm install --prefix client && npm run build --prefix client",
+    "start": "node server/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
