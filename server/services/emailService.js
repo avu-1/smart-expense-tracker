@@ -1,53 +1,37 @@
 // services/emailService.js
-// Centralised email utility using Nodemailer.
-// All email sends go through this module so templates stay in one place.
-// Falls back gracefully (console.log) if SMTP credentials are not configured.
+// Centralised email utility.
+// Production: uses Resend (HTTP API — works on Railway, no SMTP port issues).
+// Development fallback: Nodemailer + Ethereal for previewing emails locally.
 
 const nodemailer = require('nodemailer');
 
 // ---------------------------------------------------------------------------
-// Transport setup
+// Resend (production) send helper
 // ---------------------------------------------------------------------------
+const sendViaResend = async ({ to, subject, html, from }) => {
+  const { Resend } = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { data, error } = await resend.emails.send({ from, to, subject, html });
+  if (error) throw new Error(error.message || JSON.stringify(error));
+  return data;
+};
 
-/**
- * Build a transporter.  If SMTP_HOST is set we use real credentials; otherwise
- * we create an Ethereal test account (https://ethereal.email) so emails can be
- * previewed during development without a real mail server.
- */
-let transporter = null;
-
-const getTransporter = async () => {
-  if (transporter) return transporter; // Reuse existing connection
-
-  if (process.env.SMTP_HOST) {
-    // Production / staging SMTP (Gmail, SendGrid, AWS SES, etc.)
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true', // true for port 465
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      connectionTimeout: 10000,  // 10s to connect
-      greetingTimeout: 10000,    // 10s for SMTP greeting
-      socketTimeout: 15000,      // 15s per socket op
-    });
-    console.log(`📧 Email service: SMTP ${process.env.SMTP_HOST}:${process.env.SMTP_PORT} secure=${process.env.SMTP_SECURE}`);
-  } else {
-    // Development fallback — Ethereal (no config needed)
-    const testAccount = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      auth: { user: testAccount.user, pass: testAccount.pass },
-    });
-    console.log('📧 Email service: using Ethereal test account');
-    console.log(`   Preview URL base: https://ethereal.email/messages`);
-    console.log(`   Credentials: ${testAccount.user} / ${testAccount.pass}`);
-  }
-
-  return transporter;
+// ---------------------------------------------------------------------------
+// Nodemailer Ethereal (dev only) setup
+// ---------------------------------------------------------------------------
+let devTransporter = null;
+const getDevTransporter = async () => {
+  if (devTransporter) return devTransporter;
+  const testAccount = await nodemailer.createTestAccount();
+  devTransporter = nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    auth: { user: testAccount.user, pass: testAccount.pass },
+  });
+  console.log('📧 Email service: using Ethereal test account (dev)');
+  console.log(`   Preview: https://ethereal.email/messages`);
+  console.log(`   Credentials: ${testAccount.user} / ${testAccount.pass}`);
+  return devTransporter;
 };
 
 // ---------------------------------------------------------------------------
@@ -56,32 +40,28 @@ const getTransporter = async () => {
 
 /**
  * Send a single email.
+ * Production: uses Resend HTTP API (works on Railway — no SMTP ports needed).
+ * Development: falls back to Ethereal for preview.
  * @param {Object} options - { to, subject, html, text }
- * @returns {Promise<Object|null>} Nodemailer info object, or null on failure
  */
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async ({ to, subject, html }) => {
+  const FROM = process.env.RESEND_FROM || process.env.SMTP_FROM || 'SpendWise <onboarding@resend.dev>';
   try {
-    const t = await getTransporter();
-    const info = await t.sendMail({
-      from: `"SpendWise 💰" <${process.env.SMTP_FROM || 'noreply@spendwise.app'}>`,
-      to,
-      subject,
-      text: text || '',
-      html,
-    });
-
-    console.log(`✅ Email successfully sent to ${to}. Message ID: ${info.messageId}`);
-
-    // In development, log the Ethereal preview link
-    if (!process.env.SMTP_HOST) {
-      console.log(`📧 Email preview → ${nodemailer.getTestMessageUrl(info)}`);
+    if (process.env.RESEND_API_KEY) {
+      // ── Production: Resend HTTP API ──────────────────────────────────────
+      console.log(`📧 Sending via Resend to ${to}...`);
+      const data = await sendViaResend({ to, subject, html, from: FROM });
+      console.log(`✅ Resend: email sent to ${to}. ID: ${data?.id}`);
+      return data;
+    } else {
+      // ── Development: Ethereal preview ────────────────────────────────────
+      const t = await getDevTransporter();
+      const info = await t.sendMail({ from: FROM, to, subject, html });
+      console.log(`📧 Dev email preview → ${nodemailer.getTestMessageUrl(info)}`);
+      return info;
     }
-
-    return info;
   } catch (err) {
-    // Never crash the app because of an email failure
     console.error(`❌ Email send failed to ${to}:`, err.message);
-    console.error(err);
     return null;
   }
 };

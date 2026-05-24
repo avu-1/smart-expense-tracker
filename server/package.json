@@ -19,7 +19,8 @@
     "mongoose": "^8.0.3",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.8",
-    "redis": "^4.6.11"
+    "redis": "^4.6.11",
+    "resend": "^6.12.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
