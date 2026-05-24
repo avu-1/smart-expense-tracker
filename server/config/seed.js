@@ -25,6 +25,11 @@ const seedData = async () => {
     name: 'Alex Johnson',
     email: 'demo@example.com',
     password: hashedPassword,
+    emailNotifications: {
+      budgetAlert: true,
+      billReminder: true,
+      transactionConfirm: true,
+    },
   });
 
   console.log('👤 Created demo user: demo@example.com / demo123');
