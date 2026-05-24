@@ -67,15 +67,18 @@ const sendEmail = async ({ to, subject, html, text }) => {
       html,
     });
 
+    console.log(`✅ Email successfully sent to ${to}. Message ID: ${info.messageId}`);
+
     // In development, log the Ethereal preview link
     if (!process.env.SMTP_HOST) {
-      console.log(`📧 Email sent → ${nodemailer.getTestMessageUrl(info)}`);
+      console.log(`📧 Email preview → ${nodemailer.getTestMessageUrl(info)}`);
     }
 
     return info;
   } catch (err) {
     // Never crash the app because of an email failure
-    console.error('❌ Email send failed:', err.message);
+    console.error(`❌ Email send failed to ${to}:`, err.message);
+    console.error(err);
     return null;
   }
 };
