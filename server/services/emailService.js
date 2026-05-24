@@ -29,8 +29,11 @@ const getTransporter = async () => {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      connectionTimeout: 10000,  // 10s to connect
+      greetingTimeout: 10000,    // 10s for SMTP greeting
+      socketTimeout: 15000,      // 15s per socket op
     });
-    console.log('📧 Email service: using configured SMTP');
+    console.log(`📧 Email service: SMTP ${process.env.SMTP_HOST}:${process.env.SMTP_PORT} secure=${process.env.SMTP_SECURE}`);
   } else {
     // Development fallback — Ethereal (no config needed)
     const testAccount = await nodemailer.createTestAccount();
