@@ -6,6 +6,7 @@ const connectDB = require('./db');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const Budget = require('../models/Budget');
+const RecurringTransaction = require('../models/RecurringTransaction');
 
 const seedData = async () => {
   await connectDB();
@@ -14,6 +15,7 @@ const seedData = async () => {
   await User.deleteMany({});
   await Transaction.deleteMany({});
   await Budget.deleteMany({});
+  await RecurringTransaction.deleteMany({});
 
   console.log('🗑️  Cleared existing data');
 
@@ -82,6 +84,49 @@ const seedData = async () => {
   });
 
   console.log('📊 Created sample budget: ₹50,000 for current month');
+
+  // Create sample recurring transactions
+  const nextMonth = new Date(now);
+  nextMonth.setMonth(now.getMonth() + 1);
+  nextMonth.setDate(5); // Due on 5th
+  
+  const inTwoWeeks = new Date(now);
+  inTwoWeeks.setDate(now.getDate() + 14); // Due in 14 days
+
+  await RecurringTransaction.insertMany([
+    {
+      userId: user._id,
+      title: 'Netflix Subscription',
+      amount: 499,
+      type: 'expense',
+      category: 'Entertainment',
+      cycle: 'monthly',
+      interval: 1,
+      nextExecutionDate: nextMonth,
+    },
+    {
+      userId: user._id,
+      title: 'Gym Membership',
+      amount: 1500,
+      type: 'expense',
+      category: 'Health',
+      cycle: 'monthly',
+      interval: 1,
+      nextExecutionDate: nextMonth,
+    },
+    {
+      userId: user._id,
+      title: 'Freelance Retainer',
+      amount: 25000,
+      type: 'income',
+      category: 'Freelance',
+      cycle: 'monthly',
+      interval: 1,
+      nextExecutionDate: inTwoWeeks,
+    }
+  ]);
+  console.log('🔄 Created 3 sample recurring transactions');
+
   console.log('\n✅ Database seeded successfully!');
   console.log('🚀 Login with: demo@example.com / demo123');
 
