@@ -22,8 +22,8 @@ const seedData = async () => {
   // Create demo user
   const hashedPassword = await bcrypt.hash('demo123', 12);
   const user = await User.create({
-    name: 'Alex Johnson',
-    email: 'demo@example.com',
+    name: 'Avinash',
+    email: 'avu0000001@gmail.com',
     password: hashedPassword,
     emailNotifications: {
       budgetAlert: true,
@@ -32,7 +32,7 @@ const seedData = async () => {
     },
   });
 
-  console.log('👤 Created demo user: demo@example.com / demo123');
+  console.log('👤 Created demo user: avu0000001@gmail.com / demo123');
 
   // Generate transactions for last 3 months
   const categories = {
@@ -133,7 +133,7 @@ const seedData = async () => {
   console.log('🔄 Created 3 sample recurring transactions');
 
   console.log('\n✅ Database seeded successfully!');
-  console.log('🚀 Login with: demo@example.com / demo123');
+  console.log('🚀 Login with: avu0000001@gmail.com / demo123');
 
   process.exit(0);
 };
