@@ -97,10 +97,16 @@ const addTransaction = async (req, res, next) => {
     // Optionally send confirmation email (fire-and-forget)
     try {
       const user = await User.findById(req.user._id).select('name email emailNotifications');
+      console.log(`📧 Email check — user: ${user?.email}, transactionConfirm: ${user?.emailNotifications?.transactionConfirm}`);
       if (user?.emailNotifications?.transactionConfirm) {
-        sendTransactionConfirmation(user, transaction).catch(() => {});
+        console.log(`📧 Sending transaction confirmation to ${user.email}...`);
+        sendTransactionConfirmation(user, transaction).catch((e) => console.error('📧 sendTransactionConfirmation error:', e.message));
+      } else {
+        console.log(`📧 Skipped — transactionConfirm is off for ${user?.email}`);
       }
-    } catch (_) {} // Never fail the main response for an email
+    } catch (emailErr) {
+      console.error('📧 Email block error:', emailErr.message);
+    }
 
     res.status(201).json({
       success: true,
